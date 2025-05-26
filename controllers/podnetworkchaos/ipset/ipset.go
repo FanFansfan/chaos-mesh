@@ -21,6 +21,7 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/chaos-mesh/chaos-mesh/api/v1alpha1"
@@ -49,8 +50,53 @@ func BuildIPSets(pods []v1.Pod, externalCidrs []v1alpha1.CidrAndPort, networkcha
 	}
 
 	for _, pod := range pods {
-		if len(pod.Status.PodIP) > 0 {
-			cidrs = append(cidrs, netutils.IPToCidr(pod.Status.PodIP))
+		containerPorts := []int32{}
+		hostPorts := map[int32]int32{}
+		for _, container := range pod.Spec.Containers {
+			for _, port := range container.Ports {
+				for _, tp := range networkchaos.Spec.PortsNameOrValue {
+					// 不同容器的端口应该是不会重复的？
+					if (tp.Type == intstr.String && tp.StrVal == port.Name) || tp.IntVal == port.ContainerPort {
+						containerPorts = append(containerPorts, port.ContainerPort)
+						break
+					}
+				}
+				if port.HostPort != 0 {
+					hostPorts[port.ContainerPort] = port.HostPort
+				}
+			}
+		}
+
+		if len(networkchaos.Spec.PortsNameOrValue) > 0 {
+			for _, cp := range containerPorts {
+				if len(pod.Status.PodIP) > 0 {
+					cidrAndPorts = append(cidrAndPorts, v1alpha1.CidrAndPort{
+						Cidr: netutils.IPToCidr(pod.Status.PodIP),
+						Port: uint16(cp),
+					})
+				}
+				if networkchaos.Spec.WithHostPort && len(pod.Status.HostIP) > 0 {
+					if hp, e := hostPorts[cp]; e {
+						cidrAndPorts = append(cidrAndPorts, v1alpha1.CidrAndPort{
+							Cidr: netutils.IPToCidr(pod.Status.HostIP),
+							Port: uint16(hp),
+						})
+					}
+				}
+			}
+		} else {
+			if len(pod.Status.PodIP) > 0 {
+				cidrs = append(cidrs, netutils.IPToCidr(pod.Status.PodIP))
+			}
+
+			if networkchaos.Spec.WithHostPort && len(pod.Status.HostIP) > 0 {
+				for _, hp := range hostPorts {
+					cidrAndPorts = append(cidrAndPorts, v1alpha1.CidrAndPort{
+						Cidr: netutils.IPToCidr(pod.Status.HostIP),
+						Port: uint16(hp),
+					})
+				}
+			}
 		}
 	}
 

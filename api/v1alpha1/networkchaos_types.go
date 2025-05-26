@@ -17,6 +17,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -128,6 +129,14 @@ type NetworkChaosSpec struct {
 	// RemoteCluster represents the remote cluster where the chaos will be deployed
 	// +optional
 	RemoteCluster string `json:"remoteCluster,omitempty"`
+
+	// 注入指定的ports
+	// +optional
+	PortsNameOrValue []intstr.IntOrString `json:"portNameOrValue,omitempty"`
+
+	// 如果有hostPort，也对应注入hostIP:hostPort的规则
+	// +optional
+	WithHostPort bool `json:"withHostPort,omitempty"`
 }
 
 // NetworkChaosStatus defines the observed state of NetworkChaos
